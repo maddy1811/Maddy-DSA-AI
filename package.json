@@ -62,7 +62,6 @@
     "jwa": "^2.0.1",
     "jws": "^4.0.1",
     "lightningcss": "^1.33.0",
-    "lightningcss-win32-x64-msvc": "^1.33.0",
     "long": "^5.3.2",
     "lucide-react": "^1.48.0",
     "math-intrinsics": "^1.1.0",
