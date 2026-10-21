@@ -19,12 +19,55 @@ export default function ChatInput({
   const imageInputRef = useRef(null);
   const fileInputRef = useRef(null);
 
+  const [isDragging, setIsDragging] = useState(false);
+
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
     }
   }, [value]);
+
+  const processImageFile = (file) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    sound.playAttach();
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      const base64Data = dataUrl.split(',')[1];
+      if (typeof onAddAttachment === 'function') {
+        onAddAttachment({
+          id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+          name: file.name || 'Pasted_Screenshot.png',
+          type: 'image',
+          previewUrl: dataUrl,
+          base64Data,
+          mimeType: file.type || 'image/png',
+          size: `${Math.round(file.size / 1024)} KB`
+        });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const processTextFile = (file) => {
+    if (!file) return;
+    sound.playAttach();
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (typeof onAddAttachment === 'function') {
+        onAddAttachment({
+          id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+          name: file.name,
+          type: 'file',
+          textContent: event.target.result,
+          mimeType: file.type || 'text/plain',
+          size: `${(file.size / 1024).toFixed(1)} KB`
+        });
+      }
+    };
+    reader.readAsText(file);
+  };
 
   // Support pasting screenshots directly from clipboard (Ctrl + V)
   const handlePaste = (e) => {
@@ -43,51 +86,43 @@ export default function ChatInput({
     }
   };
 
-  const processImageFile = (file) => {
-    sound.playAttach();
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target.result;
-      const base64Data = dataUrl.split(',')[1];
-      onAddAttachment({
-        id: `img-${Date.now()}`,
-        name: file.name || 'Pasted_Screenshot.png',
-        type: 'image',
-        previewUrl: dataUrl,
-        base64Data,
-        mimeType: file.type || 'image/png',
-        size: `${Math.round(file.size / 1024)} KB`
-      });
-    };
-    reader.readAsDataURL(file);
-  };
-
   const handleImageSelected = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      processImageFile(file);
-    }
+    const files = Array.from(e.target.files || []);
+    files.forEach(file => processImageFile(file));
     e.target.value = '';
   };
 
   const handleFileSelected = (e) => {
     const files = Array.from(e.target.files || []);
-    files.forEach(file => {
-      sound.playAttach();
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        onAddAttachment({
-          id: `file-${Date.now()}-${Math.random()}`,
-          name: file.name,
-          type: 'file',
-          textContent: event.target.result,
-          mimeType: file.type || 'text/plain',
-          size: `${(file.size / 1024).toFixed(1)} KB`
-        });
-      };
-      reader.readAsText(file);
-    });
+    files.forEach(file => processTextFile(file));
     e.target.value = '';
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer?.files || []);
+    files.forEach(file => {
+      if (file.type.startsWith('image/')) {
+        processImageFile(file);
+      } else {
+        processTextFile(file);
+      }
+    });
   };
 
   const handleKeyDown = (e) => {
@@ -105,6 +140,7 @@ export default function ChatInput({
       <input
         ref={imageInputRef}
         type="file"
+        multiple
         accept="image/*"
         style={{ display: 'none' }}
         onChange={handleImageSelected}
@@ -118,7 +154,18 @@ export default function ChatInput({
         onChange={handleFileSelected}
       />
 
-      <div className="input-container" style={{ position: 'relative' }}>
+      <div
+        className={`input-container ${isDragging ? 'drag-active' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        style={{
+          position: 'relative',
+          borderColor: isDragging ? 'var(--accent-primary)' : undefined,
+          boxShadow: isDragging ? '0 0 20px rgba(59, 130, 246, 0.4)' : undefined,
+          transition: 'all 0.2s ease'
+        }}
+      >
         {/* Attach Dropdown Menu */}
         <AttachMenu
           isOpen={isMenuOpen}
@@ -152,19 +199,33 @@ export default function ChatInput({
           {attachments.length > 0 && (
             <div className="attachment-tray">
               {attachments.map(att => (
-                <div key={att.id} className="attachment-chip">
+                <div key={att.id} className="attachment-chip" title={`${att.name} (${att.size || 'Ready'})`}>
                   {att.type === 'image' ? (
-                    <img src={att.previewUrl} alt={att.name} className="attachment-thumb" />
+                    <div style={{ position: 'relative', width: '26px', height: '26px', flexShrink: 0 }}>
+                      <img
+                        src={att.previewUrl}
+                        alt={att.name}
+                        className="attachment-thumb"
+                        style={{ width: '100%', height: '100%', borderRadius: '4px', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.2)' }}
+                      />
+                    </div>
                   ) : (
                     <FileCode size={14} color="var(--accent-primary)" />
                   )}
                   <span className="attachment-name">{att.name}</span>
+                  {att.size && (
+                    <span style={{ fontSize: '10px', opacity: 0.65, background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px' }}>
+                      {att.size}
+                    </span>
+                  )}
                   <button
+                    type="button"
                     onClick={() => {
                       sound.playPop();
                       onRemoveAttachment(att.id);
                     }}
                     className="attachment-remove-btn"
+                    title="Remove attachment"
                   >
                     <X size={12} />
                   </button>

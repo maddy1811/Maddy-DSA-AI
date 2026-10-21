@@ -63,7 +63,8 @@ export async function sendChatMessage({ prompt, history = [], attachments = [], 
       // Add recent history
       const recentHistory = history.slice(-6);
       recentHistory.forEach(msg => {
-        const parts = [{ text: msg.text }];
+        const textContent = msg.text?.trim() || (msg.attachments?.length > 0 ? `[User shared ${msg.attachments[0].name || 'DSA diagram/code'}]` : "DSA Question");
+        const parts = [{ text: textContent }];
         contents.push({
           role: msg.sender === 'user' ? 'user' : 'model',
           parts
